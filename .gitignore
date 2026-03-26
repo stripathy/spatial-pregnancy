@@ -4,7 +4,10 @@ data/*.rds
 data/*.tar.gz
 data/merfish_clean/
 data/reference/*.h5
-data/reference/*.json
+
+# Keep these small reference files tracked
+!data/reference/gene_symbol_to_ensembl_mouse.json
+!data/genename_mapping_merfish_panel.csv
 
 # Output
 output/
