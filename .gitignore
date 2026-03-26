@@ -1,0 +1,24 @@
+# Data (large files)
+data/*.h5ad
+data/*.rds
+data/*.tar.gz
+data/merfish_clean/
+data/reference/*.h5
+data/reference/*.json
+
+# Output
+output/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

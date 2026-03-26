@@ -1,0 +1,7 @@
+anndata>=0.10
+scanpy>=1.9
+numpy
+pandas
+scipy
+h5py
+matplotlib
