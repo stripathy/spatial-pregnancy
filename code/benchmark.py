@@ -13,23 +13,16 @@ Usage:
 """
 
 import os
+import sys
 import argparse
 import numpy as np
 import pandas as pd
 import anndata as ad
-from scipy.spatial import KDTree
 
 
 WORKING_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-
-def spatial_coherence(labels, coords, k=20):
-    """Per-cell spatial coherence: fraction of k-NN with same label."""
-    kdt = KDTree(coords)
-    _, nn_idx = kdt.query(coords, k=k+1)
-    nn_idx = nn_idx[:, 1:]
-    nn_labels = labels[nn_idx]
-    return (nn_labels == labels[:, None]).mean(axis=1)
+sys.path.insert(0, os.path.join(WORKING_DIR, 'code'))
+from modules.correlation import spatial_coherence
 
 
 def proportion_correlation(query_proportions, ref_proportions):

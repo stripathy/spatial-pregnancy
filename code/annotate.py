@@ -28,11 +28,13 @@ import pandas as pd
 import anndata as ad
 import scipy.sparse as sparse
 from scipy.stats import rankdata
-from scipy.spatial import KDTree
 from collections import defaultdict
 import h5py
 
 WORKING_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(WORKING_DIR, 'code'))
+from modules.gene_mapping import load_gene_mapping, get_gene_indices
+from modules.correlation import spatial_coherence as _spatial_coherence
 
 
 # ── Core functions ────────────────────────────────────────────────────────
@@ -138,45 +140,7 @@ def build_restricted_centroids(taxonomy, valid_types, gene_indices, level='class
     return {k: type_sums[k] / type_counts[k] for k in type_sums if type_counts[k] >= 1}
 
 
-def get_gene_indices(query_genes, ref_gene_ensembl, gene_mapping):
-    """Find indices of query genes in reference, using symbol->ensembl mapping.
-
-    gene_mapping: dict or DataFrame mapping gene symbols to Ensembl IDs.
-    Returns: (gene_order, ref_indices) — matched gene symbols and their ref column indices.
-    """
-    ens2idx = {g: i for i, g in enumerate(ref_gene_ensembl)}
-
-    gene_order = []
-    ref_indices = []
-    for gene in query_genes:
-        ens = gene_mapping.get(gene)
-        if ens and ens in ens2idx:
-            gene_order.append(gene)
-            ref_indices.append(ens2idx[ens])
-
-    return gene_order, ref_indices
-
-
-def load_gene_mapping(query_genes, merfish_mapping_path=None, symbol_to_ensembl_path=None):
-    """Build gene symbol -> Ensembl ID mapping.
-
-    Uses MERFISH panel mapping if available (more complete for MERFISH genes),
-    falls back to general symbol->ensembl JSON.
-    """
-    mapping = {}
-
-    # General mapping
-    if symbol_to_ensembl_path and os.path.exists(symbol_to_ensembl_path):
-        with open(symbol_to_ensembl_path) as f:
-            mapping.update(json.load(f))
-
-    # MERFISH-specific mapping (overrides general)
-    if merfish_mapping_path and os.path.exists(merfish_mapping_path):
-        df = pd.read_csv(merfish_mapping_path)
-        for _, row in df.iterrows():
-            mapping[row['Gene Symbol']] = row['Gene ID '].strip()
-
-    return mapping
+# get_gene_indices and load_gene_mapping imported from modules.gene_mapping
 
 
 def prepare_expression(adata, gene_order, method='pearson'):
@@ -249,13 +213,8 @@ def hierarchical_classify(qX, class_centroids, subc_centroids, supt_centroids,
     }
 
 
-def spatial_coherence(obs, coords, label_col, k=20):
-    """Compute mean spatial coherence: fraction of k-NN sharing the same label."""
-    kdt = KDTree(coords)
-    _, nn_idx = kdt.query(coords, k=k+1)
-    nn_idx = nn_idx[:, 1:]
-    labels = obs[label_col].values
-    return (labels[nn_idx] == labels[:, None]).mean(axis=1).mean()
+# spatial_coherence imported from modules.correlation as _spatial_coherence
+# Call: _spatial_coherence(labels_array, coords, k=20).mean()
 
 
 # ── Main pipeline ─────────────────────────────────────────────────────────
@@ -298,7 +257,6 @@ def annotate_dataset(input_path, output_path, stats_path, valid_types_path,
 
     # Build gene mapping
     gene_mapping = load_gene_mapping(
-        adata.var_names,
         merfish_mapping_path=merfish_mapping_path,
         symbol_to_ensembl_path=symbol_to_ensembl_path
     )
@@ -378,10 +336,10 @@ def annotate_dataset(input_path, output_path, stats_path, valid_types_path,
     # Spatial coherence
     if 'x' in adata.obs.columns and 'y' in adata.obs.columns:
         coords = adata.obs[['x', 'y']].values
-        sc_hier = spatial_coherence(adata.obs, coords, f'{prefix}_class')
+        sc_hier = _spatial_coherence(adata.obs[f'{prefix}_class'].values, coords).mean()
         print(f"  Spatial coherence (class): {sc_hier:.3f}")
         if 'class' in adata.obs.columns:
-            sc_cast = spatial_coherence(adata.obs, coords, 'class')
+            sc_cast = _spatial_coherence(adata.obs['class'].values, coords).mean()
             print(f"  Spatial coherence CAST (class): {sc_cast:.3f}")
 
     print(f"{'='*60}")

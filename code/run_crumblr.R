@@ -6,6 +6,7 @@
 #   CTRL (nulliparous) vs PREG (pregnant E18) vs POSTPART (postpartum day 20)
 #
 # Formula: ~ condition  (no covariates needed: all female, same age)
+# For Xenium 5k: ~ condition + (1|animal)  (random effect for biological replicate)
 # Contrasts: PREG vs CTRL, POSTPART vs CTRL, POSTPART vs PREG
 #
 # Input:  output/crumblr/crumblr_input_{dataset}_{method}[_{stratum}].csv
@@ -19,7 +20,8 @@ library(limma)
 cat("Libraries loaded\n")
 
 # ── Paths ──────────────────────────────────────────────────────────
-base_dir <- path.expand("~/Github/spatial pregnancy")
+library(here)
+base_dir <- here::here()
 in_dir <- file.path(base_dir, "output", "crumblr")
 out_dir <- in_dir
 
@@ -67,15 +69,26 @@ for (fpath in input_files) {
   }
 
   # ── Build metadata ─────────────────────────────────────────────
-  meta <- unique(df[, c("donor", "condition")])
+  has_animal <- "animal" %in% colnames(df)
+
+  if (has_animal) {
+    meta <- unique(df[, c("donor", "condition", "animal")])
+  } else {
+    meta <- unique(df[, c("donor", "condition")])
+  }
   rownames(meta) <- meta$donor
   meta <- meta[rownames(count_wide), , drop = FALSE]
   meta$condition <- factor(meta$condition, levels = c("CTRL", "PREG", "POSTPART"))
 
   cat(sprintf("  %d CTRL, %d PREG, %d POSTPART\n",
-              sum(meta$condition == "CTRL"),
-              sum(meta$condition == "PREG"),
-              sum(meta$condition == "POSTPART")))
+              sum(meta$condition == "CTRL", na.rm = TRUE),
+              sum(meta$condition == "PREG", na.rm = TRUE),
+              sum(meta$condition == "POSTPART", na.rm = TRUE)))
+
+  if (has_animal) {
+    cat(sprintf("  %d biological replicates (animal)\n", length(unique(meta$animal))))
+    cat(sprintf("  Using formula: ~ condition + (1|animal)\n"))
+  }
 
   # ── Run crumblr ────────────────────────────────────────────────
   count_mat <- as.matrix(count_wide)
@@ -90,7 +103,12 @@ for (fpath in input_files) {
   if (is.null(cobj)) next
 
   # ── Fit dream model ────────────────────────────────────────────
-  form <- ~ condition
+  # Use random effect for animal if available
+  if (has_animal) {
+    form <- ~ condition + (1|animal)
+  } else {
+    form <- ~ condition
+  }
 
   fit <- tryCatch({
     f <- dream(cobj, form, meta)
