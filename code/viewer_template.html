@@ -292,6 +292,7 @@ async function loadSample(sid) {
 
   // Reset view
   fitView();
+  activeTypes._rebuild = true;
   buildCellTypeFilter();
   updateInfo();
   document.getElementById('loading').className = '';
@@ -344,21 +345,25 @@ function buildCellTypeFilter() {
   const counts = {};
   labels.forEach(idx => { counts[idx] = (counts[idx] || 0) + 1; });
 
-  activeTypes = new Set(cats);
+  // Only reset activeTypes when switching samples (not when filter buttons call us)
+  if (activeTypes._rebuild) {
+    activeTypes = new Set(cats);
+    delete activeTypes._rebuild;
+  }
 
   // Restore search filter if active
   const searchVal = document.getElementById('ct-search').value.toLowerCase();
 
   cats.forEach((cat, idx) => {
     const row = document.createElement('div');
-    row.className = 'ct-row';
+    row.className = 'ct-row' + (activeTypes.has(cat) ? '' : ' dimmed');
     row.dataset.name = cat.toLowerCase();
     if (searchVal && !cat.toLowerCase().includes(searchVal)) {
       row.style.display = 'none';
     }
     const cb = document.createElement('input');
     cb.type = 'checkbox';
-    cb.checked = true;
+    cb.checked = activeTypes.has(cat);
     cb.onchange = () => {
       if (cb.checked) activeTypes.add(cat);
       else activeTypes.delete(cat);
@@ -389,14 +394,18 @@ function filterCellTypes(query) {
 
 function selectAllTypes() { getCurrentCats().forEach(c => activeTypes.add(c)); buildCellTypeFilter(); render(); }
 function selectNoneTypes() { activeTypes.clear(); buildCellTypeFilter(); render(); }
+function isNeuronal(name) {
+  const lo = name.toLowerCase();
+  return lo.includes('glut') || lo.includes('gaba') || lo.includes('dopa') || lo.includes('sero') || lo.includes('gnrh');
+}
 function selectNeurons() {
   activeTypes.clear();
-  getCurrentCats().forEach(c => { if (c.includes('Glut') || c.includes('GABA') || c.includes('Dopa') || c.includes('Sero')) activeTypes.add(c); });
+  getCurrentCats().forEach(c => { if (isNeuronal(c)) activeTypes.add(c); });
   buildCellTypeFilter(); render();
 }
 function selectGlia() {
   activeTypes.clear();
-  getCurrentCats().forEach(c => { if (!c.includes('Glut') && !c.includes('GABA') && !c.includes('Dopa') && !c.includes('Sero')) activeTypes.add(c); });
+  getCurrentCats().forEach(c => { if (!isNeuronal(c)) activeTypes.add(c); });
   buildCellTypeFilter(); render();
 }
 
@@ -440,6 +449,7 @@ function setupControls() {
       document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       colorMode = btn.dataset.mode;
+      activeTypes._rebuild = true;
       buildCellTypeFilter();
       render();
     };
@@ -509,6 +519,7 @@ function setColorMode(mode) {
     b.classList.toggle('active', b.dataset.mode === mode);
   });
   colorMode = mode;
+  activeTypes._rebuild = true;
   buildCellTypeFilter();
   render();
 }
@@ -540,8 +551,13 @@ function showTooltip(e) {
 
   const candidates = getCellsNearPoint(dataX, dataY, searchRadius);
 
+  const cats = getCurrentCats();
+  const labels = getCurrentLabels();
+  const isConf = colorMode === 'confidence';
   let bestDist = 20, bestIdx = -1;
   for (const i of candidates) {
+    // Skip cells hidden by the filter
+    if (!isConf && !activeTypes.has(cats[labels[i]])) continue;
     const sx = sampleData.x[i] * viewScale + viewX;
     const sy = sampleData.y[i] * viewScale + viewY;
     const d = Math.abs(sx - mx) + Math.abs(sy - my);
