@@ -28,7 +28,8 @@ def is_neuronal(class_label):
     return any(kw in str(class_label) for kw in NEURONAL_KEYWORDS)
 
 
-def build_counts(obs_df, celltype_col, class_col=None, stratum=None):
+def build_counts(obs_df, celltype_col, class_col=None, stratum=None,
+                  condition_col='condition', animal_col=None):
     """Build long-format count table."""
     if stratum == 'neuronal' and class_col:
         obs_df = obs_df[obs_df[class_col].apply(is_neuronal)]
@@ -44,13 +45,23 @@ def build_counts(obs_df, celltype_col, class_col=None, stratum=None):
     counts = counts.rename(columns={'sample': 'donor', celltype_col: 'celltype'})
 
     # Add condition
-    counts['condition'] = counts['donor'].str.extract(r'^(CTRL|PREG|POSTPART)')[0]
+    if condition_col in obs_df.columns:
+        cond_map = obs_df.groupby('sample')[condition_col].first().to_dict()
+        counts['condition'] = counts['donor'].map(cond_map)
+    else:
+        counts['condition'] = counts['donor'].str.extract(r'^(CTRL|PREG|POSTPART)')[0]
+
+    # Add animal (biological replicate) if available
+    if animal_col and animal_col in obs_df.columns:
+        animal_map = obs_df.groupby('sample')[animal_col].first().to_dict()
+        counts['animal'] = counts['donor'].map(animal_map)
 
     return counts
 
 
-def process_dataset(name, h5ad_paths, annotation_methods, min_presence=0.5):
-    """Process one dataset (MERFISH or Slide-tags) with multiple annotation methods."""
+def process_dataset(name, h5ad_paths, annotation_methods, min_presence=0.5,
+                    condition_col='condition', animal_col=None):
+    """Process one dataset with multiple annotation methods."""
 
     print(f"\n{'='*60}")
     print(f"Processing {name}")
@@ -67,6 +78,9 @@ def process_dataset(name, h5ad_paths, annotation_methods, min_presence=0.5):
     obs_all = pd.concat(all_obs, ignore_index=False)
     n_samples = obs_all['sample'].nunique()
     print(f"  Total: {len(obs_all):,} cells, {n_samples} samples")
+    if animal_col and animal_col in obs_all.columns:
+        n_animals = obs_all[animal_col].nunique()
+        print(f"  Animals (biological replicates): {n_animals}")
 
     for method_name, celltype_col, class_col in annotation_methods:
         print(f"\n  --- Annotation: {method_name} ---")
@@ -75,7 +89,8 @@ def process_dataset(name, h5ad_paths, annotation_methods, min_presence=0.5):
             stratum_suffix = f'_{stratum}' if stratum else ''
             stratum_label = stratum or 'whole'
 
-            counts = build_counts(obs_all, celltype_col, class_col, stratum)
+            counts = build_counts(obs_all, celltype_col, class_col, stratum,
+                                  condition_col=condition_col, animal_col=animal_col)
             if len(counts) == 0:
                 print(f"    {stratum_label}: no cells, skipping")
                 continue
@@ -123,6 +138,15 @@ def main():
     ]
 
     process_dataset('slidetags', slidetags_paths, slidetags_methods)
+
+    # ── Xenium 5k ──────────────────────────────────────────────────────
+    xenium_path = os.path.join(CLASS_DIR, 'xenium5k_annotated.h5ad')
+    if os.path.exists(xenium_path):
+        xenium_methods = [
+            ('hier_subclass', 'hier_subclass', 'hier_class'),
+        ]
+        process_dataset('xenium5k', [xenium_path], xenium_methods,
+                        condition_col='condition', animal_col='animal')
 
     print(f"\nTotal time: {time.time()-t0:.0f}s")
     print("Done!")

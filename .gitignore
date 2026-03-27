@@ -2,6 +2,8 @@
 data/*.h5ad
 data/*.rds
 data/*.tar.gz
+data/*.xlsx
+data/*.textClipping
 data/merfish_clean/
 data/reference/*.h5
 
@@ -9,14 +11,23 @@ data/reference/*.h5
 !data/reference/gene_symbol_to_ensembl_mouse.json
 !data/genename_mapping_merfish_panel.csv
 
-# Output
+# Allen Brain Cell Atlas download cache
+ABC/
+
+# Output (all generated)
 output/
+
+# Generated figures
+figures/
 
 # Python
 __pycache__/
 *.pyc
 .venv/
 *.egg-info/
+
+# Claude dev config
+.claude/
 
 # OS
 .DS_Store
